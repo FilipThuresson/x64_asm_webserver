@@ -15,11 +15,10 @@ main:
 
     mov     r12, rax                ; r12 = int s_fd = socket(AF_INET, SOCK_STREAM, 0);
 
-    mov   rsi, rax   ; "%x" takes a 32-bit unsigned int
-    lea   rdi, [rel format]
-    xor   rax, rax           ; AL=0  no FP args in XMM regs
-    call  printf
-    
+    test    rax, rax
+    mov     rsi, rax
+    js      _exit_failure_s
+
     ; ---- Bind ----
 
     mov     rdi, r12
@@ -28,22 +27,22 @@ main:
     mov     rax, 49             
     syscall                         ; bind
 
-    mov   rsi, rax   ; "%x" takes a 32-bit unsigned int
-    lea   rdi, [rel format]
-    xor   rax, rax           ; AL=0  no FP args in XMM regs
-    call  printf
+    test    rax, rax
+    mov     rsi, rax
+    js      _exit_failure_b
 
     ; ---- Listen ----
 
     mov     rdi, r12                ; int file_descriptor
-    mov     rsi, 2                  ; int backlog
+    mov     rsi, 10                  ; int backlog
     mov     rax, 50                 ; sys_listen
     syscall
 
-    mov   rsi, rax   ; "%x" takes a 32-bit unsigned int
-    lea   rdi, [rel format]
-    xor   rax, rax           ; AL=0  no FP args in XMM regs
-    call  printf
+    test    rax, rax
+    mov     rsi, rax
+    js      _exit_failure_l
+
+loop:
 
     ; ---- Accept ----
 
@@ -55,10 +54,9 @@ main:
 
     mov     r13, rax                ; r13 = int client_fd
 
-    mov   rsi, rax   ; "%x" takes a 32-bit unsigned int
-    lea   rdi, [rel format2]
-    xor   rax, rax           ; AL=0  no FP args in XMM regs
-    call  printf
+    test    rax, rax
+    mov     rsi, rax
+    js      _exit_failure_a
 
     ; ---- Open ----
     
@@ -70,11 +68,9 @@ main:
 
     mov     r14, rax
 
-    mov   rsi, rax   ; "%x" takes a 32-bit unsigned int
-    lea   rdi, [rel format3]
-    xor   rax, rax           ; AL=0  no FP args in XMM regs
-    call  printf
-
+    test    rax, rax
+    mov     rsi, rax
+    js      _exit_failure_o
 
     ; ---- Sendfile ----
 
@@ -82,8 +78,12 @@ main:
     mov     rsi, r14
     mov     rdi, r13
     mov     rdx, 0
-    mov     r10, 256
+    mov     r10, 400
     syscall
+
+    lea     rdi, [rel msg]
+    xor     rax, rax
+    call    printf
 
     ; ---- close(f_fd) ----
 
@@ -97,16 +97,53 @@ main:
     mov     rax, 3
     syscall
 
+    ;jmp loop                       ; Uncomment to allow for continues uses, im getting connection reset most of the time when loop is uncommented
+
 _exit_success:
     mov     rdi, 0x0
     mov     rax, 60
-    syscall         
+    syscall      
+
+
+_exit_failure_s:
+    lea   rdi, [rel error_s]
+    jmp _exit_failure
+
+_exit_failure_b:
+    lea   rdi, [rel error_b]
+    jmp   _exit_failure
+
+_exit_failure_l:
+    lea   rdi, [rel error_l]
+    jmp   _exit_failure
+
+_exit_failure_a:
+    lea   rdi, [rel error_a]
+    jmp   _exit_failure
+
+_exit_failure_o:
+    lea   rdi, [rel error_o]
+    jmp   _exit_failure
+
+_exit_failure:
+
+    xor   rax, rax           ; AL=0  no FP args in XMM regs
+    call  printf
+
+    mov     rdi, 0x1
+    mov     rax, 60
+    syscall
 
 section .data
 
-    format db "%d", 10, 0   ; C 0-terminated string: "%#x\n" 
-    format2 db "Accept: %d", 10, 0   ; C 0-terminated string: "%#x\n" 
-    format3 db "Open: %d", 10, 0   ; C 0-terminated string: "%#x\n" 
+    msg db "Sending file to client", 10, 0
+    error_s db "Error socket: %d", 10, 0   
+    error_b db "Error bind: %d", 10, 0   
+    error_l db "Error listen: %d", 10, 0   
+    error_a db "Error accept: %d", 10, 0    
+    error_o db "Error open: %d", 10, 0   
+
+    
 
     filename db "response.txt", 0  
 
